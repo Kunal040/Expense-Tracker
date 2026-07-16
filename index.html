@@ -384,7 +384,7 @@ const $ = s => document.querySelector(s);
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
 const todayISO = () => { const d = new Date(); return iso(d); };
 function iso(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
-function fmt(n){ return state.settings.cur + Number(n).toLocaleString(undefined,{minimumFractionDigits:0, maximumFractionDigits:2}); }
+function fmt(n){ const v = Number(n); return (v<0?"-":"") + state.settings.cur + Math.abs(v).toLocaleString(undefined,{minimumFractionDigits:0, maximumFractionDigits:2}); }
 function catById(id){ return state.cats.find(c=>c.id===id) || {name:"?", icon:"❔", color:"#999", id:"?"}; }
 function hash(s){ let h=5381; for(let i=0;i<s.length;i++){ h=((h<<5)+h+s.charCodeAt(i))|0; } return String(h); }
 function toast(msg){
@@ -465,12 +465,13 @@ function parseMerchant(t){
 function parseSMS(raw){
   const t = raw.trim();
   if(!t) return null;
-  const debit = /\b(debit|debited|spent|paid|purchase|charged|withdrawn|txn|transaction)\b/i.test(t);
+  const debit = /\b(debit|debited|spent|paid|payment|purchase|purchased|charged|withdrawn|sent|txn|transaction)\b/i.test(t);
   const credit = /\b(credited|received|refund|deposited|cashback)\b/i.test(t);
   if(credit && !debit) return {skip:"credit", raw:t};
   const amt = parseAmount(t);
   if(amt === null || amt <= 0) return {skip:"noamount", raw:t};
   const note = parseMerchant(t);
+  if(!debit && !note) return {skip:"notxn", raw:t};  // e.g. stray balance line
   return {amt, date:parseDate(t), note, cat:guessCat(t), raw:t, skip:null};
 }
 
@@ -557,9 +558,11 @@ function splitMessages(text){
 function runParse(text, isQueue){
   if(!text.trim()){ toast("Nothing to parse"); return; }
   const parts = splitMessages(text).map(s=>s.trim()).filter(Boolean);
-  pending = []; let dupes = 0; const skips = [];
+  pending = []; let dupes = 0; const skips = [], batch = new Set();
   for(const p of parts){
     const h = hash(p);
+    if(batch.has(h)){ dupes++; continue; }
+    batch.add(h);
     if(isQueue && state.seen.includes(h)){ dupes++; continue; }
     const r = parseSMS(p);
     if(!r) continue;
@@ -589,7 +592,7 @@ function renderPreview(skips, dupes){
       <div class="amt"><input data-i="${i}" class="pvamt" inputmode="decimal" value="${p.amt}"></div>
     </div>`;
   }).join("") + skips.map(s=>
-    `<div class="skipnote">⤫ Skipped (${s.skip === "credit" ? "credit, not an expense" : "no amount found"}): “${esc(s.raw.slice(0,70))}…”</div>`
+    `<div class="skipnote">⤫ Skipped (${({credit:"credit, not an expense",noamount:"no amount found",notxn:"doesn’t look like a payment"})[s.skip]}): “${esc(s.raw.slice(0,70))}…”</div>`
   ).join("");
   $("#pvConfirm").textContent = pending.length ? "Add " + pending.length + " expense" + (pending.length>1?"s":"") : "Close";
 }
@@ -627,7 +630,9 @@ function renderHome(){
 
   const budget = state.cats.reduce((t,c)=> t + (c.budget||0), 0);
   $("#homeBudget").textContent = budget ? fmt(budget) : "—";
-  $("#homeLeft").textContent = budget ? fmt(budget - tot) : "—";
+  const leftEl = $("#homeLeft");
+  leftEl.textContent = budget ? fmt(budget - tot) : "—";
+  leftEl.style.color = (budget && budget - tot < 0) ? "var(--red)" : "";
 
   /* donut */
   const per = state.cats.map(c=>({c, v:cycleTotal(start,c.id)})).filter(x=>x.v>0).sort((a,b)=>b.v-a.v);
@@ -674,6 +679,7 @@ function itemHTML(e){
 
 /* ================= history ================= */
 function renderHistoryFilters(){
+  const pc = $("#fCat").value, pm = $("#fMonth").value;
   $("#fCat").innerHTML = `<option value="">All categories</option>` +
     state.cats.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join("");
   const months = [...new Set(state.expenses.map(e=>e.date.slice(0,7)))].sort().reverse();
@@ -682,6 +688,7 @@ function renderHistoryFilters(){
       const d = new Date(m+"-02");
       return `<option value="${m}">${d.toLocaleDateString(undefined,{month:"short",year:"numeric"})}</option>`;
     }).join("");
+  $("#fCat").value = pc; $("#fMonth").value = pm;
 }
 function renderHistory(){
   const q = $("#q").value.toLowerCase(), fc = $("#fCat").value, fm = $("#fMonth").value;
@@ -701,7 +708,7 @@ function renderHistory(){
   }
   $("#histList").innerHTML = html;
 }
-["q","fCat","fMonth"].forEach(id=> $("#"+id).addEventListener("input", renderHistory));
+["q","fCat","fMonth"].forEach(id=>{ $("#"+id).addEventListener("input", renderHistory); $("#"+id).addEventListener("change", renderHistory); });
 document.addEventListener("click", e=>{
   const it = e.target.closest(".item[data-id]");
   if(it){ const exp = state.expenses.find(x=>x.id===it.dataset.id); if(exp) openAdd(exp); }
