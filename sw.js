@@ -1,5 +1,5 @@
 /* Ledger offline cache — only used if you host the app (Option A). */
-const CACHE = "ledger-v1";
+const CACHE = "ledger-v2";
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(["./", "./index.html"])));
   self.skipWaiting();
