@@ -98,6 +98,11 @@ h1.brand{font-size:20px;margin:2px 0 0;font-weight:700;letter-spacing:-.01em}
   cursor:pointer;-webkit-tap-highlight-color:transparent}
 .bars button.b:active i{opacity:.85}
 .bars button.b:focus-visible{outline:2px solid var(--mint);outline-offset:2px;border-radius:6px}
+#sheetCycle{display:flex;flex-direction:column;overflow:hidden}
+#sheetCycle .cybody{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.sheet-x{width:36px;height:36px;border-radius:50%;border:none;background:var(--chip);color:var(--ink);
+  font-size:18px;line-height:1;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.sheet-x:active{opacity:.7}
 .cyrow{display:flex;align-items:center;gap:8px;font-size:13.5px;margin-top:9px}
 .cyrow .dot{width:9px;height:9px;border-radius:3px;flex-shrink:0}
 .cyrow .ln{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -130,7 +135,7 @@ nav.tabs button.on{color:var(--mint)}
 .sheet{position:fixed;left:0;right:0;bottom:0;background:var(--card);z-index:51;
   border-radius:18px 18px 0 0;padding:14px 16px calc(18px + env(safe-area-inset-bottom));
   transform:translateY(105%);transition:transform .28s cubic-bezier(.2,.8,.25,1);
-  max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
+  max-height:88vh;max-height:88dvh;overflow-y:auto;-webkit-overflow-scrolling:touch}
 @media (prefers-reduced-motion:reduce){.sheet{transition:none}}
 .sheet.open{transform:translateY(0)}
 .sheet .grab{width:36px;height:4px;border-radius:2px;background:var(--line);margin:0 auto 10px}
@@ -326,14 +331,19 @@ input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid v
 <input type="file" id="queueFile" accept=".txt,text/plain" hidden>
 
 <div class="sheet" id="sheetCycle">
-  <div class="grab"></div>
-  <h2 id="cyTitle"></h2>
-  <div class="spread" style="margin:2px 0 4px">
+  <div class="grab" id="cyGrab"></div>
+  <div class="spread" style="margin-bottom:2px">
+    <h2 id="cyTitle" style="margin:0"></h2>
+    <button type="button" class="sheet-x" id="cyClose" aria-label="Close">✕</button>
+  </div>
+  <div class="spread" style="margin:2px 0 6px">
     <span class="small muted" id="cyCount"></span>
     <span class="mono" id="cyTotal" style="font-size:22px;font-weight:600"></span>
   </div>
-  <div id="cyCats"></div>
-  <div id="cyList"></div>
+  <div class="cybody">
+    <div id="cyCats"></div>
+    <div id="cyList"></div>
+  </div>
 </div>
 
 <div class="sheet" id="sheetPreview">
@@ -512,6 +522,9 @@ function closeSheet(){
   $("#veil").classList.remove("open");
 }
 $("#veil").addEventListener("click", closeSheet);
+$("#cyClose").addEventListener("click", closeSheet);
+$("#cyGrab").addEventListener("click", closeSheet);
+document.addEventListener("keydown", e=>{ if(e.key==="Escape") closeSheet(); });
 
 /* in-app confirm — iOS home-screen apps suppress window.confirm() */
 let cfResolve = null;
