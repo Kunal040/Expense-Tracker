@@ -94,6 +94,15 @@ h1.brand{font-size:20px;margin:2px 0 0;font-weight:700;letter-spacing:-.01em}
 .bars .b i{width:100%;max-width:34px;border-radius:6px 6px 2px 2px;background:var(--mint);opacity:.5;min-height:2px}
 .bars .b.cur i{opacity:1}
 .bars .b span{font-size:10.5px;color:var(--muted)}
+.bars button.b{background:none;border:none;padding:0;margin:0;font:inherit;color:inherit;
+  cursor:pointer;-webkit-tap-highlight-color:transparent}
+.bars button.b:active i{opacity:.85}
+.bars button.b:focus-visible{outline:2px solid var(--mint);outline-offset:2px;border-radius:6px}
+.cyrow{display:flex;align-items:center;gap:8px;font-size:13.5px;margin-top:9px}
+.cyrow .dot{width:9px;height:9px;border-radius:3px;flex-shrink:0}
+.cyrow .ln{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cyrow .lv{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.cyrow .pc{width:38px;text-align:right;color:var(--muted);font-size:12px}
 /* forms */
 .field{margin:12px 0}
 .field label{display:block;font-size:12.5px;font-weight:600;color:var(--muted);margin-bottom:6px}
@@ -201,7 +210,7 @@ input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid v
     </div>
 
     <div class="card">
-      <p class="label">Last 6 months</p>
+      <p class="label">Last 6 months <span style="text-transform:none;letter-spacing:0;font-weight:400">· tap a bar for details</span></p>
       <div class="bars" id="trend"></div>
     </div>
 
@@ -315,6 +324,17 @@ input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid v
 </div>
 
 <input type="file" id="queueFile" accept=".txt,text/plain" hidden>
+
+<div class="sheet" id="sheetCycle">
+  <div class="grab"></div>
+  <h2 id="cyTitle"></h2>
+  <div class="spread" style="margin:2px 0 4px">
+    <span class="small muted" id="cyCount"></span>
+    <span class="mono" id="cyTotal" style="font-size:22px;font-weight:600"></span>
+  </div>
+  <div id="cyCats"></div>
+  <div id="cyList"></div>
+</div>
 
 <div class="sheet" id="sheetPreview">
   <div class="grab"></div>
@@ -672,14 +692,55 @@ function renderHome(){
   const cycles = []; for(let i=5;i>=0;i--) cycles.push(addMonths(start,-i));
   const vals = cycles.map(s=>cycleTotal(s));
   const max = Math.max(...vals, 1);
+  trendCycles = cycles;
   $("#trend").innerHTML = cycles.map((s,i)=>
-    `<div class="b ${i===5?"cur":""}"><i style="height:${Math.max(2, vals[i]/max*88)}px"></i>
-     <span>${s.toLocaleDateString(undefined,{month:"short"})}</span></div>`).join("");
+    `<button type="button" class="b ${i===5?"cur":""}" data-i="${i}"
+       aria-label="${esc(cycleLabel(s))}: ${esc(fmt(vals[i]))}">
+     <i style="height:${Math.max(2, vals[i]/max*88)}px"></i>
+     <span>${s.toLocaleDateString(undefined,{month:"short"})}</span></button>`).join("");
 
   /* top spends */
   const top = state.expenses.filter(e=>inCycle(e.date,start)).sort((a,b)=>b.amt-a.amt).slice(0,5);
   $("#topList").innerHTML = top.length ? top.map(itemHTML).join("")
     : `<div class="empty">Add your first expense with the + button</div>`;
+}
+/* tap a bar in the trend chart -> breakdown + expenses for that month */
+let trendCycles = [];
+$("#trend").addEventListener("click", e=>{
+  const b = e.target.closest(".b[data-i]");
+  if(b && trendCycles[+b.dataset.i]) openCycle(trendCycles[+b.dataset.i]);
+});
+function openCycle(start){
+  const list = state.expenses.filter(e=>inCycle(e.date,start))
+    .sort((a,b)=> b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
+  const tot = list.reduce((t,e)=>t+e.amt,0);
+  $("#cyTitle").textContent = cycleLabel(start);
+  $("#cyTotal").textContent = fmt(tot);
+  $("#cyCount").textContent = list.length + (list.length===1 ? " expense" : " expenses");
+  if(!list.length){
+    $("#cyCats").innerHTML = "";
+    $("#cyList").innerHTML = `<div class="empty">No expenses in this month</div>`;
+    openSheet("#sheetCycle"); return;
+  }
+  const per = state.cats.map(c=>({c, v:cycleTotal(start,c.id)})).filter(x=>x.v>0).sort((a,b)=>b.v-a.v);
+  $("#cyCats").innerHTML = `<div style="margin:6px 0 4px">` + per.map(({c,v})=>{
+    const pct = tot ? v/tot*100 : 0;
+    return `<div class="cyrow"><span class="dot" style="background:${c.color}"></span>
+      <span class="ln">${esc(c.icon)} ${esc(c.name)}</span>
+      <span class="lv">${fmt(v)}</span><span class="pc">${Math.round(pct)}%</span></div>
+      <div class="bar"><i style="width:${pct.toFixed(1)}%;background:${c.color}"></i></div>`;
+  }).join("") + `</div>`;
+  let html = "", lastDate = "";
+  for(const e of list){
+    if(e.date !== lastDate){
+      lastDate = e.date;
+      const d = new Date(e.date+"T12:00:00");
+      html += `<div class="datehead">${d.toLocaleDateString(undefined,{weekday:"short",day:"numeric",month:"short"})}</div>`;
+    }
+    html += itemHTML(e);
+  }
+  $("#cyList").innerHTML = html;
+  openSheet("#sheetCycle");
 }
 function itemHTML(e){
   const c = catById(e.cat);
